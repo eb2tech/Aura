@@ -136,6 +136,16 @@ static void settings_event_handler(lv_event_t *e);
 const lv_img_dsc_t *choose_image(int wmo_code, int is_day);
 const lv_img_dsc_t *choose_icon(int wmo_code, int is_day);
 
+void do_geocode_query(const char *q);
+void apModeCallback(WiFiManager *mgr);
+void wifi_splash_screen();
+void daily_cb(lv_event_t *e);
+void hourly_cb(lv_event_t *e);
+static void reset_confirm_yes_cb(lv_event_t *e);
+static void reset_confirm_no_cb(lv_event_t *e);
+void create_location_dialog();
+static void location_save_event_cb(lv_event_t *e);
+static void location_cancel_event_cb(lv_event_t *e);
 
 int day_of_week(int y, int m, int d) {
   static const int t[] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };

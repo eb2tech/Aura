@@ -3,10 +3,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
-
-#define LV_CONF_INCLUDE_SIMPLE
 #include <lvgl.h>
-
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <Preferences.h>
@@ -20,11 +17,11 @@
 #define LCD_BACKLIGHT_PIN 21
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
-#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 10 * (LV_COLOR_DEPTH / 8))
+#define DRAW_BUF_SIZE (SCREEN_WIDTH * SCREEN_HEIGHT / 2)
 
-#define LATITUDE_DEFAULT "51.5074"
-#define LONGITUDE_DEFAULT "-0.1278"
-#define LOCATION_DEFAULT "London"
+#define LATITUDE_DEFAULT "29.7604"
+#define LONGITUDE_DEFAULT "-95.3698"
+#define LOCATION_DEFAULT "Houston"
 #define DEFAULT_CAPTIVE_SSID "Aura"
 #define UPDATE_INTERVAL 600000UL  // 10 minutes
 
@@ -33,6 +30,7 @@ XPT2046_Touchscreen touchscreen(XPT2046_CS, XPT2046_IRQ);
 uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 static const char *weekdays[] = {"Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"};
 int x, y, z;
+TFT_eSPI tft = TFT_eSPI();
 
 // Preferences
 static Preferences prefs;
@@ -147,6 +145,13 @@ void create_location_dialog();
 static void location_save_event_cb(lv_event_t *e);
 static void location_cancel_event_cb(lv_event_t *e);
 
+// If logging is enabled, it will inform the user about what is happening in the library
+void log_print(lv_log_level_t level, const char * buf) {
+  LV_UNUSED(level);
+  Serial.println(buf);
+  Serial.flush();
+}
+
 int day_of_week(int y, int m, int d) {
   static const int t[] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
   if (m < 3) y -= 1;
@@ -249,52 +254,6 @@ void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   }
 }
 
-void setup() {
-  Serial.begin(115200);
-  delay(100);
-
-  Serial.println("In setup()");
-  
-  TFT_eSPI tft = TFT_eSPI();
-  tft.init();
-  pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
-
-  lv_init();
-
-  // Init touchscreen
-  touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
-  touchscreen.begin(touchscreenSPI);
-  touchscreen.setRotation(0);
-
-  lv_display_t *disp = lv_tft_espi_create(SCREEN_WIDTH, SCREEN_HEIGHT, draw_buf, sizeof(draw_buf));
-  lv_indev_t *indev = lv_indev_create();
-  lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
-  lv_indev_set_read_cb(indev, touchscreen_read);
-
-  // Load saved prefs
-  prefs.begin("weather", false);
-  String lat = prefs.getString("latitude", LATITUDE_DEFAULT);
-  lat.toCharArray(latitude, sizeof(latitude));
-  String lon = prefs.getString("longitude", LONGITUDE_DEFAULT);
-  lon.toCharArray(longitude, sizeof(longitude));
-  use_fahrenheit = prefs.getBool("useFahrenheit", false);
-  location = prefs.getString("location", LOCATION_DEFAULT);
-  uint32_t brightness = prefs.getUInt("brightness", 255);
-  use_24_hour = prefs.getBool("use24Hour", false);
-  analogWrite(LCD_BACKLIGHT_PIN, brightness);
-
-  // Check for Wi-Fi config and request it if not available
-  WiFiManager wm;
-  wm.setAPCallback(apModeCallback);
-  wm.autoConnect(DEFAULT_CAPTIVE_SSID);
-
-  lv_timer_create(update_clock, 1000, NULL);
-
-  lv_obj_clean(lv_scr_act());
-  create_ui();
-  fetch_and_update_weather();
-}
-
 void flush_wifi_splashscreen(uint32_t ms = 200) {
   uint32_t start = millis();
   while (millis() - start < ms) {
@@ -306,19 +265,6 @@ void flush_wifi_splashscreen(uint32_t ms = 200) {
 void apModeCallback(WiFiManager *mgr) {
   wifi_splash_screen();
   flush_wifi_splashscreen();
-}
-
-void loop() {
-  lv_timer_handler();
-  static uint32_t last = millis();
-
-  if (millis() - last >= UPDATE_INTERVAL) {
-    fetch_and_update_weather();
-    last = millis();
-  }
-
-  lv_tick_inc(5);
-  delay(5);
 }
 
 void wifi_splash_screen() {
@@ -1111,4 +1057,68 @@ const lv_img_dsc_t* choose_icon(int code, int is_day) {
         ? &icon_mostly_cloudy_day
         : &icon_mostly_cloudy_night;
   }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+
+  String LVGL_Arduino = String("LVGL Library Version: ") + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
+  Serial.println(LVGL_Arduino);
+
+  Serial.println("In setup()");
+  
+  tft.init();
+  tft.fillScreen(TFT_BLUE);
+  pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
+
+  lv_init();
+  lv_log_register_print_cb(log_print);
+
+  // Init touchscreen
+  touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
+  touchscreen.begin(touchscreenSPI);
+  touchscreen.setRotation(0);
+
+  lv_display_t *disp = lv_tft_espi_create(SCREEN_WIDTH, SCREEN_HEIGHT, draw_buf, sizeof(draw_buf));
+  lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_0);
+  lv_indev_t *indev = lv_indev_create();
+  lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_read_cb(indev, touchscreen_read);
+
+  // Load saved prefs
+  prefs.begin("weather", false);
+  String lat = prefs.getString("latitude", LATITUDE_DEFAULT);
+  lat.toCharArray(latitude, sizeof(latitude));
+  String lon = prefs.getString("longitude", LONGITUDE_DEFAULT);
+  lon.toCharArray(longitude, sizeof(longitude));
+  use_fahrenheit = prefs.getBool("useFahrenheit", false);
+  location = prefs.getString("location", LOCATION_DEFAULT);
+  uint32_t brightness = prefs.getUInt("brightness", 255);
+  use_24_hour = prefs.getBool("use24Hour", false);
+  analogWrite(LCD_BACKLIGHT_PIN, brightness);
+
+  // Check for Wi-Fi config and request it if not available
+  WiFiManager wm;
+  wm.setAPCallback(apModeCallback);
+  wm.autoConnect(DEFAULT_CAPTIVE_SSID);
+
+  lv_timer_create(update_clock, 1000, NULL);
+
+  lv_obj_clean(lv_scr_act());
+  create_ui();
+  fetch_and_update_weather();
+}
+
+void loop() {
+  lv_timer_handler();
+  static uint32_t last = millis();
+
+  if (millis() - last >= UPDATE_INTERVAL) {
+    fetch_and_update_weather();
+    last = millis();
+  }
+
+  lv_tick_inc(5);
+  delay(5);
 }

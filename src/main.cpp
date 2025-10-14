@@ -27,7 +27,7 @@
 #define UPDATE_INTERVAL 600000UL  // 10 minutes
 
 // Night mode starts at 10pm and ends at 6am
-#define NIGHT_MODE_START_HOUR 22
+#define NIGHT_MODE_START_HOUR 23
 #define NIGHT_MODE_END_HOUR 6
 
 LV_FONT_DECLARE(lv_font_montserrat_latin_12);
@@ -174,6 +174,13 @@ static void screen_event_cb(lv_event_t *e);
 static void settings_event_handler(lv_event_t *e);
 const lv_img_dsc_t *choose_image(int wmo_code, int is_day);
 const lv_img_dsc_t *choose_icon(int wmo_code, int is_day);
+
+// Screen dimming functions
+bool night_mode_should_be_active();
+void activate_night_mode();
+void deactivate_night_mode();
+void check_for_night_mode();
+void handle_temp_screen_wakeup_timeout(lv_timer_t *timer);
 
 void do_geocode_query(const char *q);
 void apModeCallback(WiFiManager *mgr);
@@ -1317,6 +1324,7 @@ void setup() {
   lon.toCharArray(longitude, sizeof(longitude));
   use_fahrenheit = prefs.getBool("useFahrenheit", false);
   location = prefs.getString("location", LOCATION_DEFAULT);
+  use_night_mode = prefs.getBool("useNightMode", false);
   uint32_t brightness = prefs.getUInt("brightness", 255);
   use_24_hour = prefs.getBool("use24Hour", false);
   analogWrite(LCD_BACKLIGHT_PIN, brightness);

@@ -2,13 +2,13 @@
 
 Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
 
-Aura is an ESP32-based weather widget that runs on ESP32-2432S028R ILI9341 devices with a 2.8" screen (sometimes called "CYD" or Cheap Yellow Display). This is a hardware-specific Arduino project that requires physical ESP32 hardware to build and test.
+Aura is an ESP32-based weather widget that runs on ESP32-2432S028R ILI9341 devices with a 2.8" screen (sometimes called "CYD" or Cheap Yellow Display). This is a hardware-specific PlatformIO project that requires physical ESP32 hardware to build and test.
 
 ## CRITICAL LIMITATIONS
 
 **HARDWARE DEPENDENCY**: This project CANNOT be built, tested, or run without the specific ESP32-2432S028R ILI9341 hardware. Do not attempt to build without the hardware.
 
-**NO COMMAND-LINE BUILDS**: This is an Arduino IDE project. There are no Makefiles, package.json, or command-line build tools. All compilation must be done through Arduino IDE.
+**PLATFORMIO BUILDS**: This is a PlatformIO project. All compilation must be done through PlatformIO CLI or VS Code with PlatformIO extension.
 
 **NO AUTOMATED TESTING**: There are no unit tests, integration tests, or CI/CD pipelines. All validation must be done manually on the hardware.
 
@@ -16,40 +16,56 @@ Aura is an ESP32-based weather widget that runs on ESP32-2432S028R ILI9341 devic
 
 ### Prerequisites
 - ESP32-2432S028R ILI9341 device with 2.8" screen (CYD/Cheap Yellow Display hardware)
-- Arduino IDE installed and configured
-- All required libraries installed in Arduino IDE (see Libraries section below)
+- PlatformIO Core or VS Code with PlatformIO extension installed
+- All required libraries will be auto-installed via platformio.ini
 
-### Arduino IDE Configuration
-Configure Arduino IDE with these EXACT settings before compiling:
-1. Board: "ESP32 Dev Module"
-2. Tools -> Partition Scheme: "Huge App (3MB No OTA/1MB SPIFFS)"
-3. All other settings can remain at defaults
+### PlatformIO Configuration
+The project is pre-configured in `platformio.ini` with these settings:
+- Board: "esp32dev"
+- Framework: "arduino"
+- Partition Scheme: "huge_app.csv"
+- Monitor Speed: 115200 baud
+- Flash Size: 4MB
 
-### Required Libraries Installation
-Install these EXACT library versions in Arduino IDE (Sketch -> Include Library -> Manage Libraries):
-- ArduinoJson 7.4.1
-- HttpClient 2.2.0  
-- TFT_eSPI 2.5.43_
-- WifiManager 2.0.17
-- XPT2046_Touchscreen 1.4
-- lvgl 9.2.2
+### Required Libraries (Auto-installed)
+These libraries are automatically installed via `platformio.ini`:
+- ArduinoJson 7.4.2
+- lvgl 9.3.0
+- TFT_eSPI 2.5.43
+- WiFiManager 2.0.17
+- XPT2046_Touchscreen 1.4 (from GitHub)
 
-**CRITICAL CONFIGURATION STEP**: After installing libraries, manually copy configuration files:
-1. Copy `TFT_eSPI/User_Setup.h` from repository to `~/Documents/Arduino/libraries/TFT_eSPI/User_Setup.h`
-2. Copy `lvgl/src/lv_conf.h` from repository to `~/Documents/Arduino/libraries/lvgl/src/lv_conf.h`
+**CRITICAL CONFIGURATION STEP**: Configuration files are included in the project:
+1. TFT_eSPI configuration: `include/Setup_ESP32_2432S028R_ILI9341.h`
+2. LVGL configuration: `include/lv_conf.h` (if needed)
+3. Build flags in `platformio.ini` handle automatic inclusion
 
 ### Project Setup
-1. Copy the `aura/` folder to `~/Documents/Arduino/aura/`
-2. Open `~/Documents/Arduino/aura/weather.ino` in Arduino IDE
-3. Verify board and partition scheme settings
-4. Connect ESP32 hardware via USB
+1. Clone or copy the project to your desired location
+2. Open project folder in VS Code with PlatformIO extension, or use PlatformIO CLI
+3. Connect ESP32 hardware via USB
+4. PlatformIO will auto-install all dependencies on first build
 
 ### Build Process
-1. Click "Verify" in Arduino IDE to compile - takes 2-3 minutes. NEVER CANCEL. Set timeout to 10+ minutes.
-2. If successful, click "Upload" to flash to device - takes 1-2 minutes. NEVER CANCEL. Set timeout to 5+ minutes.
-3. Open Serial Monitor (115200 baud) to view debug output
+**Using VS Code:**
+1. Open project in VS Code
+2. Click "Build" in PlatformIO toolbar (or Ctrl+Alt+B) - takes 2-3 minutes. NEVER CANCEL.
+3. Click "Upload" to flash to device (or Ctrl+Alt+U) - takes 1-2 minutes. NEVER CANCEL.
+4. Click "Serial Monitor" to view debug output (115200 baud)
 
-**Expected Build Time**: 2-3 minutes for verification, 1-2 minutes for upload. NEVER CANCEL builds or uploads.
+**Using PlatformIO CLI:**
+```bash
+# Build project
+pio run
+
+# Upload to device
+pio run --target upload
+
+# Open serial monitor
+pio device monitor --baud 115200
+```
+
+**Expected Build Time**: 2-3 minutes for compilation, 1-2 minutes for upload. NEVER CANCEL builds or uploads.
 
 ## Validation
 
@@ -80,7 +96,7 @@ After successfully uploading firmware, test these complete scenarios:
    - Verify device returns to captive portal mode
 
 ### Code Validation
-- Always run Arduino IDE's "Verify" before making changes
+- Always run `pio run` (build) before making changes
 - Check Serial Monitor output for runtime errors
 - Use `extract_unicode_chars.py` when modifying multilingual strings
 
@@ -89,67 +105,73 @@ After successfully uploading firmware, test these complete scenarios:
 ### Key File Locations
 ```
 Repository Structure:
-├── aura/
-│   ├── weather.ino              # Main Arduino sketch
+├── src/
+│   ├── main.cpp                 # Main Arduino application
 │   ├── extract_unicode_chars.py # Unicode analysis utility
 │   ├── icon_*.c                 # Weather icon assets
 │   ├── image_*.c                # Weather image assets
-│   └── lv_font_*.c              # LVGL font files
-├── TFT_eSPI/
-│   └── User_Setup.h             # Display driver configuration
-└── lvgl/
-    └── src/
-        └── lv_conf.h            # LVGL library configuration
+│   ├── lv_font_*.c              # LVGL font files
+│   └── translations.h           # Multilingual string definitions
+├── include/
+│   ├── Setup_ESP32_2432S028R_ILI9341.h  # TFT_eSPI configuration
+│   └── lv_conf.h                # LVGL configuration (if needed)
+├── platformio.ini               # PlatformIO project configuration
 ```
 
 ### Modifying Weather Display
-- Main UI creation: `create_ui()` function in weather.ino
+- Main UI creation: `create_ui()` function in src/main.cpp
 - Weather data fetching: `fetch_and_update_weather()` function
 - Icon selection: `choose_image()` and `choose_icon()` functions
 
 ### Adding New Languages
-1. Add language enum to `enum Language`
+1. Add language enum to `enum Language` in src/translations.h
 2. Create new `LocalizedStrings` structure
 3. Update language switching logic in settings
-4. Run `python3 aura/extract_unicode_chars.py aura/weather.ino` to get required Unicode characters
+4. Run `python3 src/extract_unicode_chars.py src/main.cpp` to get required Unicode characters
 5. Regenerate LVGL fonts with new character set if needed
 
 ### Modifying Display Configuration
-- Edit `TFT_eSPI/User_Setup.h` for display driver settings
+- Edit `include/Setup_ESP32_2432S028R_ILI9341.h` for display driver settings
 - Current config: ILI9341_2_DRIVER, 240x320 resolution, specific pin mappings
-- Edit `lvgl/src/lv_conf.h` for LVGL library settings
+- Edit `include/lv_conf.h` for LVGL library settings (if needed)
 - Current config: 16-bit color depth, ESP32 optimizations
 
 ### Font Management
-- Custom fonts in `aura/lv_font_*.c` files
+- Custom fonts in `src/lv_font_*.c` files
 - Use LVGL Font Converter tool to generate new fonts
 - Include Unicode characters: `°¿ÉÊÍÓÜßáäçèéíñóöúûü‐→` (from extract_unicode_chars.py)
 
 ## Unicode Character Analysis
 Use the included Python utility to analyze Unicode requirements:
 ```bash
-cd /path/to/aura
-python3 aura/extract_unicode_chars.py aura/weather.ino
+cd /path/to/Aura
+python3 src/extract_unicode_chars.py src/main.cpp
 ```
 This identifies all non-ASCII characters needed for LVGL font generation.
 
 ## Debugging
 
 ### Serial Monitor Output
-- Set baud rate to 115200
+- Set baud rate to 115200 (configured in platformio.ini)
 - Look for WiFi connection status
 - Monitor weather API responses
 - Check for memory allocation errors
 
+**PlatformIO Serial Monitor:**
+```bash
+pio device monitor --baud 115200
+```
+
 ### Common Issues
-- **Compilation fails**: Verify library versions and configuration files
-- **Display blank**: Check TFT_eSPI configuration and pin connections
+- **Compilation fails**: Check library versions in platformio.ini and configuration files
+- **Display blank**: Check TFT_eSPI configuration in include/Setup_ESP32_2432S028R_ILI9341.h
 - **Touch not working**: Verify XPT2046 pin configuration
 - **WiFi issues**: Check WifiManager configuration and credentials
 - **Weather not updating**: Verify internet connection and API responses
+- **collect2.exe error**: Memory/linking issue - check partition scheme and reduce binary size
 
 ### Hardware Connections
-The TFT_eSPI User_Setup.h defines these pin connections:
+The TFT_eSPI configuration defines these pin connections:
 - TFT_MISO: 12, TFT_MOSI: 13, TFT_SCLK: 14
 - TFT_CS: 15, TFT_DC: 2, TFT_RST: -1 (connected to ESP32 reset)
 - TOUCH_CS: 33, LCD_BACKLIGHT_PIN: 21
@@ -157,7 +179,7 @@ The TFT_eSPI User_Setup.h defines these pin connections:
 ## Project Architecture
 
 ### Main Components
-- **weather.ino**: Main application logic, UI, and weather fetching
+- **src/main.cpp**: Main application logic, UI, and weather fetching
 - **LVGL**: UI framework for ESP32 with touchscreen support
 - **TFT_eSPI**: Display driver for ILI9341 screens
 - **WiFiManager**: Captive portal for WiFi configuration
@@ -182,7 +204,7 @@ The TFT_eSPI User_Setup.h defines these pin connections:
 ### Making Changes
 1. Always test on actual hardware
 2. Use Serial Monitor for debugging
-3. Keep builds under 3MB (partition scheme limitation)
+3. Keep builds under partition size limit (huge_app.csv)
 4. Test all language variants when modifying UI text
 5. Verify touchscreen functionality after UI changes
 
@@ -200,16 +222,21 @@ The TFT_eSPI User_Setup.h defines these pin connections:
 ## Troubleshooting Build Issues
 
 ### Library Version Conflicts
-- Always use exact versions specified above
-- Clear Arduino library cache if needed
-- Reinstall libraries if compilation fails
+- Libraries are managed by platformio.ini - modify versions there if needed
+- Clear PlatformIO cache: `pio system prune` if needed
+- Check for conflicting library dependencies
 
 ### Configuration File Issues
-- Ensure User_Setup.h and lv_conf.h are copied correctly
-- Check that #define settings match hardware requirements
-- Verify no conflicting definitions between files
+- Ensure include/Setup_ESP32_2432S028R_ILI9341.h exists and is correct
+- Check that build_flags in platformio.ini include the correct files
+- Verify no conflicting definitions between configuration files
+
+### PlatformIO-Specific Issues
+- **collect2.exe error**: Usually memory/linking issue - check partition scheme
+- **Upload fails**: Check USB connection and board selection
+- **Dependencies not installing**: Clear .pio folder and rebuild
 
 ### Hardware-Specific Problems
 - Only works with ESP32-2432S028R ILI9341 devices
-- Different display modules may require User_Setup.h modifications
+- Different display modules may require Setup file modifications
 - Touch calibration may need adjustment for different screens

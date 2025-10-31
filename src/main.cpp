@@ -1371,25 +1371,8 @@ void setup_mqtt() {
     // client.subscribe("weather/commands");
   } else {
     Serial.printf("Failed to connect to MQTT broker, rc=%d\n", client.state());
+    prefs.putString("mqtt_ip", ""); // Clear saved broker info on failure
   }
-}
-
-void publish_weather_data() {
-  if (mqtt_broker_ip.length() == 0 || !client.connected()) {
-    return; // MQTT not available or not connected
-  }
-  
-  // Create a simple JSON payload with current weather data
-  String payload = "{";
-  payload += "\"location\":\"" + location + "\",";
-  payload += "\"latitude\":" + String(latitude) + ",";
-  payload += "\"longitude\":" + String(longitude) + ",";
-  payload += "\"temperature_unit\":\"" + String(use_fahrenheit ? "F" : "C") + "\",";
-  payload += "\"timestamp\":" + String(millis());
-  payload += "}";
-  
-  client.publish("aura/weather/status", payload.c_str());
-  Serial.println("Published weather data to MQTT");
 }
 
 void setup() {

@@ -7,6 +7,8 @@
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <Preferences.h>
+#include <ESPmDNS.h>
+#include <PubSubClient.h>
 #include "esp_system.h"
 #include "translations.h"
 
@@ -29,6 +31,8 @@
 // Night mode starts at 10pm and ends at 6am
 #define NIGHT_MODE_START_HOUR 23
 #define NIGHT_MODE_END_HOUR 6
+
+#define MDNS_HOSTNAME "aura"
 
 LV_FONT_DECLARE(lv_font_montserrat_latin_12);
 LV_FONT_DECLARE(lv_font_montserrat_latin_14);
@@ -62,8 +66,15 @@ const lv_font_t* get_font_42() {
 SPIClass touchscreenSPI = SPIClass(VSPI);
 XPT2046_Touchscreen touchscreen(XPT2046_CS, XPT2046_IRQ);
 uint32_t draw_buf[DRAW_BUF_SIZE / 4];
-int x, y, z;
+
 TFT_eSPI tft = TFT_eSPI();
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// MQTT broker discovery
+static String mqtt_broker_ip = "";
+static int mqtt_broker_port = 1883;
 
 // Preferences
 static Preferences prefs;
@@ -187,6 +198,9 @@ void apModeCallback(WiFiManager *mgr);
 void wifi_splash_screen();
 void daily_cb(lv_event_t *e);
 void hourly_cb(lv_event_t *e);
+bool discover_mqtt_broker();
+void setup_mqtt();
+void publish_weather_data();
 static void reset_confirm_yes_cb(lv_event_t *e);
 static void reset_confirm_no_cb(lv_event_t *e);
 void create_location_dialog();
@@ -294,7 +308,8 @@ static void ta_defocus_cb(lv_event_t *e) {
 void touchscreen_read(lv_indev_t *indev, lv_indev_data_t *data) {
   if (touchscreen.tirqTouched() && touchscreen.touched()) {
     TS_Point p = touchscreen.getPoint();
-
+    
+    int x, y, z;
     x = map(p.x, 200, 3700, 1, SCREEN_WIDTH);
     y = map(p.y, 240, 3800, 1, SCREEN_HEIGHT);
     z = p.z;
@@ -1289,6 +1304,94 @@ const lv_img_dsc_t* choose_icon(int code, int is_day) {
   }
 }
 
+void setup_mdns() {
+  Serial.println("Setting up mDNS responder...");
+  while (!MDNS.begin(MDNS_HOSTNAME)) {
+    Serial.println("Error setting up MDNS responder...");
+    delay(1000);
+  }
+  Serial.println("mDNS responder started");
+}
+
+bool discover_mqtt_broker() {
+  Serial.println("Searching for MQTT broker via mDNS...");
+  
+  // Query for MQTT service (_mqtt._tcp.local)
+  int n = MDNS.queryService("mqtt", "tcp");
+  
+  if (n == 0) {
+    Serial.println("No MQTT services found via mDNS");
+    
+    // Also try alternative service names
+    n = MDNS.queryService("mosquitto", "tcp");
+    if (n == 0) {
+      Serial.println("No Mosquitto services found via mDNS");
+      return false;
+    }
+  }
+  
+  Serial.printf("Found %d MQTT service(s)\n", n);
+  
+  // Use the first service found
+  mqtt_broker_ip = MDNS.IP(0).toString();
+  mqtt_broker_port = MDNS.port(0);
+  
+  Serial.printf("MQTT Broker discovered: %s:%d\n", mqtt_broker_ip.c_str(), mqtt_broker_port);
+  Serial.printf("Service name: %s\n", MDNS.hostname(0).c_str());
+  
+  // Save the discovered broker info to preferences
+  prefs.putString("mqtt_ip", mqtt_broker_ip);
+  prefs.putInt("mqtt_port", mqtt_broker_port);
+  
+  return true;
+}
+
+void setup_mqtt() {
+  // First try to load saved MQTT broker info
+  mqtt_broker_ip = prefs.getString("mqtt_ip", "");
+  mqtt_broker_port = prefs.getInt("mqtt_port", 1883);
+  
+  // If no saved broker info, try to discover via mDNS
+  if (mqtt_broker_ip.length() == 0) {
+    if (!discover_mqtt_broker()) {
+      Serial.println("No MQTT broker found. MQTT functionality disabled.");
+      return;
+    }
+  } else {
+    Serial.printf("Using saved MQTT broker: %s:%d\n", mqtt_broker_ip.c_str(), mqtt_broker_port);
+  }
+  
+  // Configure MQTT client
+  client.setServer(mqtt_broker_ip.c_str(), mqtt_broker_port);
+  
+  // Attempt to connect
+  if (client.connect("aura_weather_widget")) {
+    Serial.println("Connected to MQTT broker");
+    // You can subscribe to topics here if needed
+    // client.subscribe("weather/commands");
+  } else {
+    Serial.printf("Failed to connect to MQTT broker, rc=%d\n", client.state());
+  }
+}
+
+void publish_weather_data() {
+  if (mqtt_broker_ip.length() == 0 || !client.connected()) {
+    return; // MQTT not available or not connected
+  }
+  
+  // Create a simple JSON payload with current weather data
+  String payload = "{";
+  payload += "\"location\":\"" + location + "\",";
+  payload += "\"latitude\":" + String(latitude) + ",";
+  payload += "\"longitude\":" + String(longitude) + ",";
+  payload += "\"temperature_unit\":\"" + String(use_fahrenheit ? "F" : "C") + "\",";
+  payload += "\"timestamp\":" + String(millis());
+  payload += "}";
+  
+  client.publish("aura/weather/status", payload.c_str());
+  Serial.println("Published weather data to MQTT");
+}
+
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -1333,6 +1436,8 @@ void setup() {
   WiFiManager wm;
   wm.setAPCallback(apModeCallback);
   wm.autoConnect(DEFAULT_CAPTIVE_SSID);
+  setup_mdns();
+  setup_mqtt();
 
   lv_timer_create(update_clock, 1000, NULL);
 
@@ -1343,6 +1448,19 @@ void setup() {
 
 void loop() {
   lv_timer_handler();
+  
+  // Handle MQTT client
+  if (mqtt_broker_ip.length() > 0) {
+    if (!client.connected()) {
+      // Try to reconnect
+      if (client.connect("aura_weather_widget")) {
+        Serial.println("MQTT reconnected");
+      }
+    } else {
+      client.loop();
+    }
+  }
+  
   static uint32_t last = millis();
 
   if (millis() - last >= UPDATE_INTERVAL) {

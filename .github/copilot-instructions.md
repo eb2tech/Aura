@@ -53,17 +53,11 @@ These libraries are automatically installed via `platformio.ini`:
 3. Click "Upload" to flash to device (or Ctrl+Alt+U) - takes 1-2 minutes. NEVER CANCEL.
 4. Click "Serial Monitor" to view debug output (115200 baud)
 
-**Using PlatformIO CLI:**
-```bash
-# Build project
-pio run
-
-# Upload to device
-pio run --target upload
-
-# Open serial monitor
-pio device monitor --baud 115200
-```
+**IMPORTANT: PlatformIO CLI is NOT available in PATH**
+- PlatformIO CLI commands (`pio run`, `platformio run`) will NOT work in terminal
+- All builds, uploads, and monitoring MUST be done through VS Code PlatformIO extension UI
+- Use the PlatformIO toolbar buttons or keyboard shortcuts exclusively
+- Do NOT attempt to run PlatformIO commands in terminal - they will fail
 
 **Expected Build Time**: 2-3 minutes for compilation, 1-2 minutes for upload. NEVER CANCEL builds or uploads.
 
